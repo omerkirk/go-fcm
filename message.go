@@ -54,7 +54,7 @@ type Message struct {
 	RestrictedPackageName    string                 `json:"restricted_package_name,omitempty"`
 	Notification             *Notification          `json:"notification,omitempty"`
 	Data                     map[string]interface{} `json:"data,omitempty"`
-	
+
 	extra map[string]interface{}
 }
 
@@ -64,7 +64,6 @@ func (msg *Message) SetExtra(extra map[string]interface{}) {
 
 func (msg *Message) Extra() map[string]interface{} {
 	return msg.extra
-}
 }
 
 // Validate returns an error if the message is not well-formed.
