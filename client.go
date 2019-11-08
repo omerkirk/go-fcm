@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/valyala/fasthttp"
 )
 
 const (
@@ -74,7 +76,7 @@ func (c *Client) Send(msg *Message) (*Response, error) {
 		return nil, err
 	}
 
-	return c.send(data)
+	return c.sendFast(data)
 }
 
 // SendWithRetry sends a message to the FCM server with defined number of
@@ -93,7 +95,7 @@ func (c *Client) SendWithRetry(msg *Message, retryAttempts int) (*Response, erro
 	resp := new(Response)
 	err = retry(func() error {
 		var er error
-		resp, er = c.send(data)
+		resp, er = c.sendFast(data)
 		return er
 	}, retryAttempts)
 	if err != nil {
@@ -138,6 +140,40 @@ func (c *Client) send(data []byte) (*Response, error) {
 	// build return
 	response := new(Response)
 	if err := json.NewDecoder(resp.Body).Decode(response); err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+// send sends a request.
+func (c *Client) sendFast(data []byte) (*Response, error) {
+	req := fasthttp.AcquireRequest()
+	resp := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseRequest(req)
+	defer fasthttp.ReleaseResponse(resp)
+	req.Header.SetMethod("POST")
+	req.Header.Add("Authorization", fmt.Sprintf("key=%s", c.apiKey))
+	req.Header.Add("Content-Type", "application/json")
+	req.SetBody(data)
+	req.SetRequestURI(c.endpoint)
+
+	err := fasthttp.DoTimeout(req, resp, c.timeout)
+	if err != nil {
+		return nil, connectionError(err.Error())
+	}
+
+	sc := resp.StatusCode()
+	if sc != http.StatusOK {
+		if sc >= http.StatusInternalServerError {
+			return nil, serverError(fmt.Sprintf("%d error: %s", sc, resp.String()))
+		}
+		return nil, fmt.Errorf("%d error: %s", sc, resp.String())
+	}
+	response := new(Response)
+	body := resp.Body()
+	err = json.Unmarshal(body, &response)
+	if err != nil {
 		return nil, err
 	}
 
