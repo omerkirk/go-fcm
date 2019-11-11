@@ -36,6 +36,7 @@ var (
 type Client struct {
 	apiKey   string
 	client   *http.Client
+	fClient  *fasthttp.Client
 	endpoint string
 	timeout  time.Duration
 }
@@ -50,6 +51,7 @@ func NewClient(apiKey string, opts ...Option) (*Client, error) {
 		apiKey:   apiKey,
 		endpoint: DefaultEndpoint,
 		client:   &http.Client{},
+		fClient:  &fasthttp.Client{},
 		timeout:  DefaultTimeout,
 	}
 	for _, o := range opts {
@@ -84,12 +86,12 @@ func (c *Client) Send(msg *Message) (*Response, error) {
 func (c *Client) SendWithRetry(msg *Message, retryAttempts int) (*Response, error) {
 	// validate
 	if err := msg.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid msg: %v", err)
 	}
 	// marshal message
 	data, err := json.Marshal(msg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot create msg json: %v", err)
 	}
 
 	resp := new(Response)
@@ -153,12 +155,12 @@ func (c *Client) sendFast(data []byte) (*Response, error) {
 	defer fasthttp.ReleaseRequest(req)
 	defer fasthttp.ReleaseResponse(resp)
 	req.Header.SetMethod("POST")
+	req.Header.SetContentType("application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("key=%s", c.apiKey))
-	req.Header.Add("Content-Type", "application/json")
 	req.SetBody(data)
 	req.SetRequestURI(c.endpoint)
 
-	err := fasthttp.DoTimeout(req, resp, c.timeout)
+	err := c.fClient.DoTimeout(req, resp, c.timeout)
 	if err != nil {
 		return nil, connectionError(err.Error())
 	}
@@ -174,7 +176,7 @@ func (c *Client) sendFast(data []byte) (*Response, error) {
 	body := resp.Body()
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot parse resp body: %+v", err)
 	}
 
 	return response, nil
