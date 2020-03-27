@@ -1,3 +1,3 @@
-module github.com/appleboy/go-fcm
+module github.com/omerkirk/go-fcm
 
 go 1.12
